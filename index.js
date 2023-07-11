@@ -115,6 +115,18 @@ async function run() {
       res.send(result)
     })
 
+    // check author so that we can only serve sensitive data to the author
+    app.get('/check-author/:email', verifyJWT, async (req, res) => {
+      const email = req.params.email
+      if (email !== req.decoded.email) {
+          res.send({ author: false })
+      }
+      const query = { email: email };
+      const user = await usersCollection.findOne(query)
+      const result = { author: user?.role === 'author' }
+      res.send(result)
+  })
+
   } finally {
     // Ensures that the client will close when you finish/error
     // await client.close();
