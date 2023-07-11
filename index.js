@@ -45,6 +45,7 @@ async function run() {
     await client.db("admin").command({ ping: 1 });
     console.log("Pinged your deployment. You successfully connected to MongoDB!");
     const usersCollection = client.db("emon-blogs").collection('users');
+    const blogsCollection = client.db("emon-blogs").collection('blogs');
 
     //jwt code
     app.post('/jwt', (req, res) => {
@@ -63,6 +64,19 @@ async function run() {
         }
         const result = await usersCollection.insertOne(user)
         res.send(result)
+    })
+
+    // add a new blogs
+    // verify token so that only logged in user can post here
+    app.post('/newblog', verifyJWT, async(req, res) => {
+      const blog = req.body
+      const query = { email: blog.authorEmail }
+      const User = await usersCollection.findOne(query)
+      if(User.role != 'author'){
+        return res.send({ message: 'user is not an author!' })
+      }
+      const result = await blogsCollection.insertOne(blog)
+      res.send(result)
     })
 
   } finally {
