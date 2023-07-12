@@ -66,6 +66,13 @@ async function run() {
       res.send(result)
     })
 
+    // get all blogs
+    // public data
+    app.get('/blogs', async (req, res) => {
+      const result = await blogsCollection.find().toArray()
+      res.send(result)
+    })
+
     // add a new blogs
     // verify token so that only logged in user can post here
     app.post('/newblog', verifyJWT, async (req, res) => {
@@ -119,13 +126,44 @@ async function run() {
     app.get('/check-author/:email', verifyJWT, async (req, res) => {
       const email = req.params.email
       if (email !== req.decoded.email) {
-          res.send({ author: false })
+        res.send({ author: false })
       }
       const query = { email: email };
       const user = await usersCollection.findOne(query)
       const result = { author: user?.role === 'author' }
       res.send(result)
-  })
+    })
+
+    // add or remove like
+    app.post('/like', verifyJWT, async (req, res) => {
+      const { userEmail, blogId } = req.body;
+
+      try {
+        const query = { _id: new ObjectId(blogId) };
+        const singleBlog = await blogsCollection.findOne(query);
+
+        // Check if the user already likes this post
+        const userLikesIndex = singleBlog.likes.indexOf(userEmail);
+        if (userLikesIndex !== -1) {
+          // User already likes the post, remove their like
+          singleBlog.likes.splice(userLikesIndex, 1);
+        } else {
+          // User doesn't like the post, add their like
+          singleBlog.likes.push(userEmail);
+        }
+
+        // Update the blog in the database
+        await blogsCollection.updateOne(query, { $set: { likes: singleBlog.likes } });
+
+        // Send the updated like count to the frontend
+        res.send({ likeCount: singleBlog.likes.length });
+      } catch (error) {
+        console.error(error);
+        res.sendStatus(500); // Internal Server Error
+      }
+    });
+
+
 
   } finally {
     // Ensures that the client will close when you finish/error
