@@ -9,6 +9,7 @@ const port = process.env.PORT || 5000
 app.use(cors())
 app.use(express.json())
 
+// verify json web token for api security
 const verifyJWT = (req, res, next) => {
   const authorization = req.headers.authorization
   if (!authorization) {
@@ -24,7 +25,7 @@ const verifyJWT = (req, res, next) => {
   })
 }
 
-
+// mongo db connect code
 const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.ntvgsob.mongodb.net/?retryWrites=true&w=majority`;
 
@@ -44,17 +45,19 @@ async function run() {
     // Send a ping to confirm a successful connection
     await client.db("admin").command({ ping: 1 });
     console.log("Pinged your deployment. You successfully connected to MongoDB!");
+
+    // our db collection 
     const usersCollection = client.db("emon-blogs").collection('users');
     const blogsCollection = client.db("emon-blogs").collection('blogs');
 
-    //jwt code
+    //generate jwt code and send it to front end
     app.post('/jwt', (req, res) => {
       const user = req.body
       const token = jwt.sign(user, process.env.SECRET_ACCESS_TOKEN, { expiresIn: '1h' });
       res.send({ token })
     })
 
-    //  create users
+    //  create users publicly accessible bcz anyone can create account on website
     app.post('/users', async (req, res) => {
       const user = req.body
       const query = { email: user.email }
@@ -67,14 +70,24 @@ async function run() {
     })
 
     // get all blogs
-    // public data
+    // public data doesn't require login 
     app.get('/blogs', async (req, res) => {
       const result = await blogsCollection.find().toArray()
+      // update page view count
+      // this is not a recommended way but as we didn't open single blog into different page so we have no options to do so.
+      result.forEach(async (blog) => {
+        // Perform the logic to increment the view count for each blog
+        await blogsCollection.updateOne(
+          { _id: blog._id },
+          { $inc: { pageView: 1 } } // Increment the page view count by 1
+        );
+      });
       res.send(result)
     })
 
     // add a new blogs
     // verify token so that only logged in user can post here
+    // private data serve to only logged in user
     app.post('/newblog', verifyJWT, async (req, res) => {
       const blog = req.body
       const query = { email: blog.authorEmail }
@@ -98,6 +111,7 @@ async function run() {
     })
 
     // delete blog from my blog routes
+    // security ensure by jwt
     app.delete('/myblogs/:id', verifyJWT, async (req, res) => {
       const id = req.params.id
       const query = { _id: new ObjectId(id) }
@@ -106,6 +120,7 @@ async function run() {
     })
 
     // update blog from my blog routes
+    // security ensure by jwt
     app.patch('/myblogs/:id', verifyJWT, async (req, res) => {
       const id = req.params.id
       const filter = { _id: new ObjectId(id) }
@@ -123,6 +138,7 @@ async function run() {
     })
 
     // check author so that we can only serve sensitive data to the author
+    // security ensure by jwt
     app.get('/check-author/:email', verifyJWT, async (req, res) => {
       const email = req.params.email
       if (email !== req.decoded.email) {
@@ -135,6 +151,7 @@ async function run() {
     })
 
     // add or remove like
+    // security ensure by jwt
     app.post('/like', verifyJWT, async (req, res) => {
       const { userEmail, blogId } = req.body;
 
@@ -163,6 +180,37 @@ async function run() {
       }
     });
 
+    // add comment
+    // security ensure by jwt
+    app.post('/comment', verifyJWT, async(req, res) => {
+      const { comment, blogId, userName, userPic, commentedAt } = req.body;
+
+      try {
+        const query = { _id: new ObjectId(blogId) };
+        const singleBlog = await blogsCollection.findOne(query);
+
+        if (!singleBlog) {
+          return res.status(404).json({ error: 'Blog not found' });
+        }
+
+        singleBlog.comment.push({
+          text: comment,
+          userName: userName,
+          userPic: userPic,
+          time: commentedAt
+        })
+
+        // Update the blog in the database
+        const result = await blogsCollection.updateOne(query, { $set: singleBlog });
+
+        // send result to the client
+        res.send(result);
+      } catch (error) {
+        console.error(error);
+        res.status(500).json({ error: 'Internal server error' });
+      }
+
+    })
 
 
   } finally {
@@ -172,9 +220,9 @@ async function run() {
 }
 run().catch(console.dir);
 
-
+// message when someone visit our api 
 app.get('/', (req, res) => {
-  res.send('Hello World!')
+  res.send('Hello from Emon Blog api!')
 })
 
 app.listen(port, () => {
