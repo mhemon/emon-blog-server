@@ -42,9 +42,6 @@ async function run() {
   try {
     // Connect the client to the server	(optional starting in v4.7)
     client.connect();
-    // Send a ping to confirm a successful connection
-    await client.db("admin").command({ ping: 1 });
-    console.log("Pinged your deployment. You successfully connected to MongoDB!");
 
     // our db collection 
     const usersCollection = client.db("emon-blogs").collection('users');
@@ -138,12 +135,8 @@ async function run() {
     })
 
     // check author so that we can only serve sensitive data to the author
-    // security ensure by jwt
-    app.get('/check-author/:email', verifyJWT, async (req, res) => {
+    app.get('/check-author/:email', async (req, res) => {
       const email = req.params.email
-      if (email !== req.decoded.email) {
-        res.send({ author: false })
-      }
       const query = { email: email };
       const user = await usersCollection.findOne(query)
       const result = { author: user?.role === 'author' }
@@ -211,6 +204,10 @@ async function run() {
       }
 
     })
+
+    // Send a ping to confirm a successful connection
+    await client.db("admin").command({ ping: 1 });
+    console.log("Pinged your deployment. You successfully connected to MongoDB!");
 
 
   } finally {
